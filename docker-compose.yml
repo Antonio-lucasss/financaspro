@@ -1,0 +1,27 @@
+services:
+  financas:
+    build: .
+    container_name: financaspro
+    ports:
+      - "3000:3000"
+    volumes:
+      - financas_data:/app/data
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - SUPABASE_URL=${SUPABASE_URL:-https://frjalkvpciznfnhkrdpy.supabase.co}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-sb_publishable_2xoO_alRbY7Op9JqfVdZNA_Fw1EPKLL}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://app_financas.frjalkvpciznfnhkrdpy:FinancasPro_App_2026_SecureDb!@aws-0-sa-east-1.pooler.supabase.com:5432/postgres}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/categories"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  financas_data:
+    driver: local

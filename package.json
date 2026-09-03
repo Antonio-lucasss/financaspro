@@ -1,0 +1,19 @@
+{
+  "name": "financas-app",
+  "version": "1.0.0",
+  "description": "Sistema completo de controle financeiro pessoal",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.109.0",
+    "better-sqlite3": "^11.7.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.4.2",
+    "express": "^4.21.0",
+    "pg": "^8.23.0",
+    "ws": "^8.21.3"
+  }
+}
