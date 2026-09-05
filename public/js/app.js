@@ -34,6 +34,9 @@
     vehicles: 'Veículos',
   };
 
+  let isAuthenticated = false;
+  let dataLoaded = false;
+
   function navigateTo(page) {
     currentPage = page;
 
@@ -54,6 +57,9 @@
     document.getElementById('sidebar').classList.remove('open');
     document.getElementById('sidebar-overlay').classList.remove('active');
 
+    // Do not load data if not authenticated
+    if (!isAuthenticated) return;
+
     // Load page data
     if (page === 'dashboard') loadDashboard();
     if (page === 'transactions') loadTransactions();
@@ -67,6 +73,7 @@
     // Update hash
     window.location.hash = page;
   }
+
 
   // ─── Dashboard ────────────────────────────────────────────────
 
@@ -1256,6 +1263,41 @@
     const btnCancelEditCCTx = document.getElementById('btn-edit-cc-tx-cancel');
     if (btnCancelEditCCTx) btnCancelEditCCTx.addEventListener('click', UI.closeEditCCTransactionModal);
 
+    // Auth events
+    const authForm = document.getElementById('auth-form');
+    if (authForm) authForm.addEventListener('submit', handleAuthSubmit);
+
+    const btnLogout = document.getElementById('btn-logout');
+    if (btnLogout) btnLogout.addEventListener('click', handleLogout);
+
+    const btnTopbarLock = document.getElementById('btn-topbar-lock');
+    if (btnTopbarLock) btnTopbarLock.addEventListener('click', handleLogout);
+
+    const btnChangePassword = document.getElementById('btn-change-password');
+    if (btnChangePassword) btnChangePassword.addEventListener('click', UI.openChangePasswordModal);
+
+    const changePasswordForm = document.getElementById('change-password-form');
+    if (changePasswordForm) changePasswordForm.addEventListener('submit', handleChangePasswordSubmit);
+
+    const btnCancelChangePassword = document.getElementById('btn-change-password-cancel');
+    if (btnCancelChangePassword) btnCancelChangePassword.addEventListener('click', UI.closeChangePasswordModal);
+
+    // Close change password modal on overlay click
+    const changePasswordModal = document.getElementById('change-password-modal');
+    if (changePasswordModal) {
+      changePasswordModal.addEventListener('click', (e) => {
+        if (e.target === changePasswordModal) UI.closeChangePasswordModal();
+      });
+    }
+
+    // Session expired listener
+    window.addEventListener('auth:unauthorized', () => {
+      if (isAuthenticated) {
+        isAuthenticated = false;
+        UI.showAuthOverlay('login', 'Sessão expirada. Digite sua senha para continuar.');
+      }
+    });
+
     // Hash routing
     window.addEventListener('hashchange', () => {
       const page = window.location.hash.slice(1) || 'dashboard';
@@ -1263,34 +1305,189 @@
     });
   }
 
+  // ─── Authentication Handlers ──────────────────────────────────
+  async function checkAuthAndProceed() {
+    try {
+      const status = await api.getAuthStatus();
+      if (status.needsSetup) {
+        isAuthenticated = false;
+        UI.showAuthOverlay('setup');
+        return false;
+      }
+      if (!status.authenticated) {
+        isAuthenticated = false;
+        UI.showAuthOverlay('login');
+        return false;
+      }
+      isAuthenticated = true;
+      UI.hideAuthOverlay();
+      return true;
+    } catch (err) {
+      console.error('Auth check error:', err);
+      UI.showAuthOverlay('login', 'Erro ao verificar autenticação.');
+      return false;
+    }
+  }
+
+  async function handleAuthSubmit(e) {
+    e.preventDefault();
+    const overlay = document.getElementById('auth-overlay');
+    const mode = overlay.dataset.mode || 'login';
+    const passwordInput = document.getElementById('auth-password');
+    const confirmInput = document.getElementById('auth-confirm-password');
+    const password = passwordInput.value;
+    const confirmPassword = confirmInput ? confirmInput.value : '';
+    const submitBtn = document.getElementById('btn-auth-submit');
+    const originalText = submitBtn.textContent;
+
+    if (!password) {
+      UI.showAuthOverlay(mode, 'Por favor, digite a senha.');
+      return;
+    }
+
+    if (mode === 'setup') {
+      if (password.length < 4) {
+        UI.showAuthOverlay('setup', 'A senha deve ter pelo menos 4 caracteres.');
+        return;
+      }
+      if (password !== confirmPassword) {
+        UI.showAuthOverlay('setup', 'As senhas digitadas não coincidem.');
+        return;
+      }
+    }
+
+    try {
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Verificando...';
+
+      let res;
+      if (mode === 'setup') {
+        res = await api.setupPassword(password);
+      } else {
+        res = await api.login(password);
+      }
+
+      if (res && res.token) {
+        isAuthenticated = true;
+        UI.hideAuthOverlay();
+        UI.showToast(mode === 'setup' ? 'Senha criada com sucesso!' : 'Acesso liberado!', 'success');
+        if (!dataLoaded) {
+          await loadInitialData();
+        } else {
+          navigateTo(currentPage || 'dashboard');
+        }
+      } else {
+        UI.showAuthOverlay(mode, 'Falha ao autenticar.');
+      }
+    } catch (err) {
+      UI.showAuthOverlay(mode, err.message || 'Senha incorreta.');
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = originalText;
+    }
+  }
+
+  async function handleChangePasswordSubmit(e) {
+    e.preventDefault();
+    const currentPassword = document.getElementById('change-current-password').value;
+    const newPassword = document.getElementById('change-new-password').value;
+    const confirmPassword = document.getElementById('change-confirm-password').value;
+    const errorBox = document.getElementById('change-password-error');
+
+    if (newPassword.length < 4) {
+      errorBox.textContent = 'A nova senha deve ter no mínimo 4 caracteres.';
+      errorBox.classList.remove('hidden');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      errorBox.textContent = 'A confirmação de senha não coincide.';
+      errorBox.classList.remove('hidden');
+      return;
+    }
+
+    try {
+      await api.changePassword(currentPassword, newPassword);
+      UI.closeChangePasswordModal();
+      UI.showToast('Senha alterada com sucesso!', 'success');
+    } catch (err) {
+      errorBox.textContent = err.message || 'Erro ao alterar senha.';
+      errorBox.classList.remove('hidden');
+    }
+  }
+
+  async function handleLogout() {
+    const ok = await UI.showConfirm('Bloquear / Sair', 'Deseja bloquear o sistema? Você precisará digitar a senha para acessar novamente.');
+    if (!ok) return;
+
+    try {
+      await api.logout();
+    } catch (err) {
+      console.warn('Logout error:', err);
+    }
+    isAuthenticated = false;
+    UI.showAuthOverlay('login');
+    UI.showToast('Sistema bloqueado.', 'info');
+  }
+
+  function setupPasswordToggles() {
+    document.querySelectorAll('.btn-toggle-password').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const wrapper = btn.closest('.password-input-wrapper');
+        if (!wrapper) return;
+        const input = wrapper.querySelector('input');
+        if (!input) return;
+        if (input.type === 'password') {
+          input.type = 'text';
+          btn.textContent = '🙈';
+          btn.title = 'Ocultar senha';
+        } else {
+          input.type = 'password';
+          btn.textContent = '👁️';
+          btn.title = 'Mostrar senha';
+        }
+      });
+    });
+  }
+
+  // ─── Initial Data Loading ─────────────────────────────────────
+  async function loadInitialData() {
+    allCategories = await api.getCategories();
+    allCreditCards = await api.getCreditCards();
+    allBanks = await api.getBanks();
+    allVehicles = await api.getVehicles();
+
+    // Populate filter and forms
+    UI.populateCategorySelect('filter-category', allCategories);
+    UI.populateCreditCardSelect(allCreditCards);
+    UI.populateBankSelect(allBanks, ['form-bank', 'invoice-pay-bank']);
+    UI.populateVehicleSelect(allVehicles);
+
+    // Set default date
+    document.getElementById('form-date').value = new Date().toISOString().split('T')[0];
+
+    dataLoaded = true;
+
+    // Navigate to initial page
+    const initialPage = window.location.hash.slice(1) || 'dashboard';
+    navigateTo(initialPage);
+  }
+
   // ─── Initialize ───────────────────────────────────────────────
   async function init() {
     try {
-      // Load initial data
-      allCategories = await api.getCategories();
-      allCreditCards = await api.getCreditCards();
-      allBanks = await api.getBanks();
-      allVehicles = await api.getVehicles();
-
-      // Populate filter and forms
-      UI.populateCategorySelect('filter-category', allCategories);
-      UI.populateCreditCardSelect(allCreditCards);
-      UI.populateBankSelect(allBanks, ['form-bank', 'invoice-pay-bank']);
-      UI.populateVehicleSelect(allVehicles);
-
-      // Set default date
-      document.getElementById('form-date').value = new Date().toISOString().split('T')[0];
-
-      // Bind all events
+      // Bind events and password toggle buttons immediately
       bindEvents();
       setupAutocomplete();
+      setupPasswordToggles();
 
-      // Navigate to initial page
-      const initialPage = window.location.hash.slice(1) || 'dashboard';
-      navigateTo(initialPage);
+      // Check authentication
+      const isAuthed = await checkAuthAndProceed();
+      if (isAuthed) {
+        await loadInitialData();
+      }
     } catch (err) {
-      UI.showToast('Erro ao inicializar: ' + err.message, 'error');
       console.error('Init error:', err);
+      UI.showToast('Erro ao inicializar: ' + err.message, 'error');
     }
   }
 
@@ -1301,3 +1498,4 @@
     init();
   }
 })();
+

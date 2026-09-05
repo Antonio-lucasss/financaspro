@@ -1051,6 +1051,95 @@ const UI = (() => {
     if (modal) modal.style.display = 'none';
   }
 
+  // ─── Authentication UI ───────────────────────────────────────
+  function showAuthOverlay(mode = 'login', errorMsg = null) {
+    const overlay = document.getElementById('auth-overlay');
+    const titleEl = document.getElementById('auth-title');
+    const subtitleEl = document.getElementById('auth-subtitle');
+    const submitBtn = document.getElementById('btn-auth-submit');
+    const confirmGroup = document.getElementById('auth-confirm-group');
+    const confirmInput = document.getElementById('auth-confirm-password');
+    const passInput = document.getElementById('auth-password');
+    const hintEl = document.getElementById('auth-mode-hint');
+    const errorBox = document.getElementById('auth-error');
+
+    if (!overlay) return;
+
+    overlay.dataset.mode = mode;
+    overlay.classList.remove('hidden');
+
+    if (errorMsg) {
+      errorBox.textContent = errorMsg;
+      errorBox.classList.remove('hidden');
+      const card = overlay.querySelector('.auth-card');
+      if (card) {
+        card.classList.remove('shake');
+        void card.offsetWidth; // trigger reflow
+        card.classList.add('shake');
+      }
+    } else {
+      errorBox.classList.add('hidden');
+      errorBox.textContent = '';
+    }
+
+    if (mode === 'setup') {
+      titleEl.textContent = 'Criar Senha de Acesso';
+      subtitleEl.textContent = 'Defina uma senha mestre para proteger suas finanças no Supabase e Vercel.';
+      submitBtn.textContent = 'Salvar e Acessar';
+      if (confirmGroup) confirmGroup.style.display = 'block';
+      if (confirmInput) {
+        confirmInput.required = true;
+        confirmInput.value = '';
+      }
+      if (hintEl) hintEl.textContent = 'Guarde sua senha com segurança. Ela protege todo o sistema.';
+    } else {
+      titleEl.textContent = 'Acesso ao FinançasPro';
+      subtitleEl.textContent = 'Digite sua senha para desbloquear o sistema.';
+      submitBtn.textContent = 'Entrar no Sistema';
+      if (confirmGroup) confirmGroup.style.display = 'none';
+      if (confirmInput) {
+        confirmInput.required = false;
+        confirmInput.value = '';
+      }
+      if (hintEl) hintEl.textContent = 'Acesso seguro autenticado.';
+    }
+
+    if (passInput) {
+      passInput.value = '';
+      setTimeout(() => passInput.focus(), 150);
+    }
+  }
+
+  function hideAuthOverlay() {
+    const overlay = document.getElementById('auth-overlay');
+    if (overlay) {
+      overlay.classList.add('hidden');
+      const passInput = document.getElementById('auth-password');
+      if (passInput) passInput.value = '';
+      const confirmInput = document.getElementById('auth-confirm-password');
+      if (confirmInput) confirmInput.value = '';
+      const errorBox = document.getElementById('auth-error');
+      if (errorBox) errorBox.classList.add('hidden');
+    }
+  }
+
+  function openChangePasswordModal() {
+    const modal = document.getElementById('change-password-modal');
+    if (!modal) return;
+    const form = document.getElementById('change-password-form');
+    if (form) form.reset();
+    const errorBox = document.getElementById('change-password-error');
+    if (errorBox) errorBox.classList.add('hidden');
+    modal.style.display = 'flex';
+    const currentInput = document.getElementById('change-current-password');
+    if (currentInput) setTimeout(() => currentInput.focus(), 100);
+  }
+
+  function closeChangePasswordModal() {
+    const modal = document.getElementById('change-password-modal');
+    if (modal) modal.style.display = 'none';
+  }
+
   return {
     showToast,
     showConfirm,
@@ -1091,5 +1180,11 @@ const UI = (() => {
     renderInsights,
     renderAlerts,
     renderRecentTransactions,
+    // Auth UI
+    showAuthOverlay,
+    hideAuthOverlay,
+    openChangePasswordModal,
+    closeChangePasswordModal,
   };
 })();
+

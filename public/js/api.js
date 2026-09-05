@@ -20,9 +20,15 @@ class FinanceAPI {
       if (qs) url += `?${qs}`;
     }
 
+    const headers = { 'Content-Type': 'application/json' };
+    const token = localStorage.getItem('financaspro_token');
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
     const options = {
       method,
-      headers: { 'Content-Type': 'application/json' },
+      headers,
     };
 
     if (body && (method === 'POST' || method === 'PUT')) {
@@ -33,10 +39,54 @@ class FinanceAPI {
     const data = await response.json();
 
     if (!response.ok) {
+      if (response.status === 401 && !path.startsWith('/api/auth/login')) {
+        localStorage.removeItem('financaspro_token');
+        window.dispatchEvent(new CustomEvent('auth:unauthorized', { detail: data }));
+      }
       throw new Error(data.error || `Erro ${response.status}`);
     }
 
     return data;
+  }
+
+  // ─── Authentication ──────────────────────────────
+
+  getAuthStatus() {
+    return this._request('GET', '/api/auth/status');
+  }
+
+  async login(password) {
+    const res = await this._request('POST', '/api/auth/login', { password });
+    if (res.token) {
+      localStorage.setItem('financaspro_token', res.token);
+    }
+    return res;
+  }
+
+  async setupPassword(password) {
+    const res = await this._request('POST', '/api/auth/setup', { password });
+    if (res.token) {
+      localStorage.setItem('financaspro_token', res.token);
+    }
+    return res;
+  }
+
+  async changePassword(currentPassword, newPassword) {
+    const res = await this._request('POST', '/api/auth/change-password', { currentPassword, newPassword });
+    if (res.token) {
+      localStorage.setItem('financaspro_token', res.token);
+    }
+    return res;
+  }
+
+  async logout() {
+    try {
+      await this._request('POST', '/api/auth/logout');
+    } catch {
+      // Ignore network errors on logout
+    } finally {
+      localStorage.removeItem('financaspro_token');
+    }
   }
 
   // ─── Categories ──────────────────────────────────

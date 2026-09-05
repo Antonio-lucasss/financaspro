@@ -55,6 +55,14 @@
       </a>
     </nav>
     <div class="sidebar-footer">
+      <div class="sidebar-auth-actions" style="margin-bottom: 0.75rem; display: flex; flex-direction: column; gap: 0.5rem;">
+        <button class="btn btn-ghost btn-sm sidebar-auth-btn" id="btn-change-password" style="width: 100%; justify-content: flex-start; color: rgba(255,255,255,0.85); padding: 8px 12px; border-radius: var(--radius-md);">
+          <span>🔑</span> <span>Alterar Senha</span>
+        </button>
+        <button class="btn btn-ghost btn-sm sidebar-auth-btn" id="btn-logout" style="width: 100%; justify-content: flex-start; color: rgba(255,255,255,0.85); padding: 8px 12px; border-radius: var(--radius-md);">
+          <span>🔒</span> <span>Bloquear / Sair</span>
+        </button>
+      </div>
       <div class="sidebar-version">v1.0.0</div>
     </div>
   </aside>
@@ -70,7 +78,10 @@
         <span></span><span></span><span></span>
       </button>
       <div class="topbar-title" id="topbar-title">Dashboard</div>
-      <div class="topbar-actions">
+      <div class="topbar-actions" style="display: flex; align-items: center; gap: 0.5rem;">
+        <button class="btn btn-ghost btn-sm" id="btn-topbar-lock" title="Bloquear sistema" aria-label="Bloquear sistema" style="padding: 6px 10px;">
+          <span>🔒</span>
+        </button>
         <button class="btn btn-primary btn-sm" id="btn-quick-add" aria-label="Adicionar transação rápida">
           <span>+</span> <span class="btn-quick-add-text">Nova Transação</span>
         </button>
@@ -966,6 +977,84 @@
       </form>
     </div>
   </div>
+
+  <!-- Auth Overlay (Login / First-time Setup) -->
+  <div class="auth-overlay hidden" id="auth-overlay">
+    <div class="auth-card">
+      <div class="auth-header">
+        <div class="auth-logo">🔒</div>
+        <h2 class="auth-title" id="auth-title">Acesso ao FinançasPro</h2>
+        <p class="auth-subtitle" id="auth-subtitle">Digite sua senha para desbloquear o sistema</p>
+      </div>
+
+      <div class="auth-error-box hidden" id="auth-error"></div>
+
+      <form id="auth-form" class="auth-form" autocomplete="off">
+        <div class="form-group" id="auth-password-group">
+          <label for="auth-password" id="auth-password-label">Senha de Acesso</label>
+          <div class="password-input-wrapper">
+            <input type="password" id="auth-password" class="text-input" placeholder="Digite sua senha..." required autocomplete="current-password">
+            <button type="button" class="btn-toggle-password" id="btn-toggle-password" title="Mostrar/ocultar senha" tabindex="-1">
+              👁️
+            </button>
+          </div>
+        </div>
+
+        <div class="form-group" id="auth-confirm-group" style="display: none;">
+          <label for="auth-confirm-password">Confirmar Nova Senha</label>
+          <div class="password-input-wrapper">
+            <input type="password" id="auth-confirm-password" class="text-input" placeholder="Confirme sua senha..." autocomplete="new-password">
+            <button type="button" class="btn-toggle-password" id="btn-toggle-confirm" title="Mostrar/ocultar senha" tabindex="-1">
+              👁️
+            </button>
+          </div>
+        </div>
+
+        <button type="submit" class="auth-submit-btn" id="btn-auth-submit">
+          Entrar no Sistema
+        </button>
+        <p class="auth-mode-hint" id="auth-mode-hint">Acesso protegido com autenticação segura.</p>
+      </form>
+    </div>
+  </div>
+
+  <!-- Change Password Modal -->
+  <div class="modal-overlay" id="change-password-modal" style="display: none;">
+    <div class="modal card">
+      <h3 class="modal-title">🔑 Alterar Senha de Acesso</h3>
+      <div class="auth-error-box hidden" id="change-password-error" style="margin-bottom: 1rem;"></div>
+      <form id="change-password-form">
+        <div class="form-grid form-grid-small" style="grid-template-columns: 1fr; gap: 0.8rem;">
+          <div class="form-group">
+            <label for="change-current-password">Senha Atual *</label>
+            <div class="password-input-wrapper">
+              <input type="password" id="change-current-password" class="text-input" required placeholder="Digite a senha atual">
+              <button type="button" class="btn-toggle-password" id="btn-toggle-current" title="Mostrar/ocultar senha" tabindex="-1">👁️</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="change-new-password">Nova Senha *</label>
+            <div class="password-input-wrapper">
+              <input type="password" id="change-new-password" class="text-input" required minlength="4" placeholder="Mínimo 4 caracteres">
+              <button type="button" class="btn-toggle-password" id="btn-toggle-new" title="Mostrar/ocultar senha" tabindex="-1">👁️</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="change-confirm-password">Confirmar Nova Senha *</label>
+            <div class="password-input-wrapper">
+              <input type="password" id="change-confirm-password" class="text-input" required minlength="4" placeholder="Confirme a nova senha">
+              <button type="button" class="btn-toggle-password" id="btn-toggle-cp-confirm" title="Mostrar/ocultar senha" tabindex="-1">👁️</button>
+            </div>
+          </div>
+        </div>
+        <div class="modal-actions" style="margin-top: 1.2rem;">
+          <button type="submit" class="btn btn-primary" id="btn-change-password-save">Salvar Nova Senha</button>
+          <button type="button" class="btn btn-ghost" id="btn-change-password-cancel">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
   <script src="/js/api.js"></script>

@@ -13,12 +13,222 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+// ─── Authentication & Security Layer ──────────────────────────────────────────
+const AUTH_SECRET = process.env.AUTH_SECRET || process.env.SUPABASE_ANON_KEY || 'financaspro-secret-salt-2026';
+
+function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
+  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+  return `${salt}:${hash}`;
+}
+
+function verifyPassword(password, storedCombined) {
+  if (!storedCombined || typeof storedCombined !== 'string' || !storedCombined.includes(':')) {
+    return false;
+  }
+  const [salt, originalHash] = storedCombined.split(':');
+  const computedHash = crypto.scryptSync(password, salt, 64).toString('hex');
+  return crypto.timingSafeEqual(Buffer.from(originalHash, 'hex'), Buffer.from(computedHash, 'hex'));
+}
+
+function generateToken() {
+  const payload = {
+    sub: 'admin',
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60), // 30 days
+  };
+  const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const signature = crypto.createHmac('sha256', AUTH_SECRET).update(encodedPayload).digest('base64url');
+  return `${encodedPayload}.${signature}`;
+}
+
+function verifyToken(token) {
+  if (!token || typeof token !== 'string') return null;
+  const parts = token.split('.');
+  if (parts.length !== 2) return null;
+  const [encodedPayload, signature] = parts;
+  const expectedSig = crypto.createHmac('sha256', AUTH_SECRET).update(encodedPayload).digest('base64url');
+  if (signature.length !== expectedSig.length) return null;
+  if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSig))) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8'));
+    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+async function getSystemPasswordHash() {
+  try {
+    const row = await db.get(`SELECT value FROM app_settings WHERE key = 'password_hash'`);
+    if (row && row.value) return row.value;
+  } catch (err) {
+    console.warn('⚠️ Erro ao consultar app_settings no banco:', err.message);
+  }
+  if (process.env.APP_PASSWORD || process.env.SYSTEM_PASSWORD) {
+    const envPass = process.env.APP_PASSWORD || process.env.SYSTEM_PASSWORD;
+    return hashPassword(envPass);
+  }
+  return null;
+}
+
+async function setSystemPasswordHash(hash) {
+  await db.query(`
+    INSERT INTO app_settings (key, value, updated_at)
+    VALUES ('password_hash', ?, NOW())
+    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+  `, [hash]);
+}
+
+
+// Public Healthcheck Endpoint (for Docker & Vercel)
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
 // Expose public Supabase config if needed by frontend
 app.get('/api/config', (req, res) => {
   res.json({
     supabaseUrl: db.SUPABASE_URL,
     supabaseAnonKey: db.SUPABASE_ANON_KEY,
   });
+});
+
+// Auth Status Endpoint
+app.get('/api/auth/status', async (req, res) => {
+  try {
+    const storedHash = await getSystemPasswordHash();
+    const isInitialized = storedHash !== null;
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    const valid = token ? verifyToken(token) !== null : false;
+    res.json({ initialized: isInitialized, authenticated: valid });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Login Endpoint
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { password } = req.body;
+    if (!password) {
+      return res.status(400).json({ error: 'Senha é obrigatória' });
+    }
+
+    const storedHash = await getSystemPasswordHash();
+    if (!storedHash) {
+      return res.status(400).json({ error: 'Nenhuma senha configurada. Faça a configuração inicial.', needsSetup: true });
+    }
+
+    const isEnvPass = (process.env.APP_PASSWORD && password === process.env.APP_PASSWORD) ||
+                      (process.env.SYSTEM_PASSWORD && password === process.env.SYSTEM_PASSWORD);
+
+    const isValid = isEnvPass || verifyPassword(password, storedHash);
+    if (!isValid) {
+      return res.status(401).json({ error: 'Senha incorreta' });
+    }
+
+    const token = generateToken();
+    res.json({ success: true, token, user: { name: 'Admin' } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// First-time Setup Endpoint
+app.post('/api/auth/setup', async (req, res) => {
+  try {
+    const storedHash = await getSystemPasswordHash();
+    if (storedHash) {
+      return res.status(400).json({ error: 'O sistema já possui senha configurada.' });
+    }
+
+    const { password } = req.body;
+    if (!password || password.length < 4) {
+      return res.status(400).json({ error: 'A senha deve ter no mínimo 4 caracteres.' });
+    }
+
+    const newHash = hashPassword(password);
+    await setSystemPasswordHash(newHash);
+
+    const token = generateToken();
+    res.status(201).json({ success: true, token, message: 'Senha inicial configurada com sucesso!' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Change Password Endpoint (Requires Authentication)
+app.post('/api/auth/change-password', async (req, res) => {
+  try {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    if (!token || !verifyToken(token)) {
+      return res.status(401).json({ error: 'Não autorizado. Faça login novamente.' });
+    }
+
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Informe a senha atual e a nova senha.' });
+    }
+
+    if (newPassword.length < 4) {
+      return res.status(400).json({ error: 'A nova senha deve ter no mínimo 4 caracteres.' });
+    }
+
+    const storedHash = await getSystemPasswordHash();
+    const isEnvPass = (process.env.APP_PASSWORD && currentPassword === process.env.APP_PASSWORD) ||
+                      (process.env.SYSTEM_PASSWORD && currentPassword === process.env.SYSTEM_PASSWORD);
+
+    const isValid = isEnvPass || (storedHash && verifyPassword(currentPassword, storedHash));
+    if (!isValid) {
+      return res.status(401).json({ error: 'Senha atual incorreta.' });
+    }
+
+    const newHash = hashPassword(newPassword);
+    await setSystemPasswordHash(newHash);
+
+    const newToken = generateToken();
+    res.json({ success: true, token: newToken, message: 'Senha alterada com sucesso!' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Logout Endpoint
+app.post('/api/auth/logout', (req, res) => {
+  res.json({ success: true, message: 'Desconectado com sucesso' });
+});
+
+// Auth Guard Middleware for All Other /api Routes
+app.use((req, res, next) => {
+  const publicPaths = [
+    '/api/health',
+    '/api/config',
+    '/api/auth/status',
+    '/api/auth/login',
+    '/api/auth/setup',
+  ];
+
+  if (publicPaths.includes(req.path) || !req.path.startsWith('/api')) {
+    return next();
+  }
+
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+
+  if (!token) {
+    return res.status(401).json({ error: 'Não autorizado. Faça login para continuar.' });
+  }
+
+  const payload = verifyToken(token);
+  if (!payload) {
+    return res.status(401).json({ error: 'Sessão expirada ou inválida. Faça login novamente.' });
+  }
+
+  req.user = payload;
+  next();
 });
 
 // ─── Process Recurring Transactions ──────────────────────────────────────────
