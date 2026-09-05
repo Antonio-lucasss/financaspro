@@ -84,6 +84,30 @@ O sistema estará acessível em `http://localhost:3000`.
 
 ---
 
+## 🔒 Autenticação e Configuração Inicial da Senha
+
+O FinançasPro possui tela de bloqueio e proteção em todas as rotas da API, funcionando tanto localmente quanto no Supabase e na Vercel:
+
+### 1. Configuração Inicial via Interface (Recomendado)
+1. Abra a aplicação no navegador (`http://localhost:3000` ou a URL do seu deploy na Vercel).
+2. Como nenhuma senha foi configurada ainda, a tela exibirá automaticamente o formulário **"Criar Senha de Acesso"**.
+3. Digite sua senha (mínimo de 4 caracteres), confirme-a no segundo campo e clique em **Salvar e Acessar**.
+4. A senha será criptografada com `scrypt` e salva na tabela `app_settings` do seu Supabase, liberando o acesso imediatamente.
+
+### 2. Configuração via Variável de Ambiente (Opcional)
+Se preferir definir uma senha fixa diretamente pelo servidor (útil nas Environment Variables da Vercel):
+```env
+APP_PASSWORD=sua_senha_secreta
+```
+O sistema aceitará essa senha imediatamente para login.
+
+### 3. Alterar Senha ou Bloquear
+- **Alterar Senha:** Clique em **"🔑 Alterar Senha"** no rodapé da barra lateral.
+- **Bloquear Tela:** Clique no ícone de cadeado **🔒** na barra superior ou em **"🔒 Bloquear / Sair"** na barra lateral.
+
+---
+
+
 ## 🐳 Executando com Docker
 
 Se preferir rodar em containers:
