@@ -567,6 +567,18 @@ function getInvoiceCutoffDate(year, month, closingDay) {
   return `${y}-${String(m + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
+// A competência da fatura é sempre o mês seguinte ao lançamento/parcela.
+// Não altere transactions.date: ela continua sendo a data exibida da compra.
+function getInvoiceMonth(transactionDate) {
+  const [year, month] = transactionDate.split('-').map(Number);
+  return getInvoiceCutoffDate(year, month, 1).slice(0, 7);
+}
+
+function getInvoiceTransactionEnd(year, month) {
+  // Limite exclusivo: outubro cobra lançamentos anteriores a 01/10.
+  return getInvoiceCutoffDate(year, month, 1);
+}
+
 function calculateInstallmentDates(purchaseDateStr, count) {
   const [pYear, pMonth, pDay] = purchaseDateStr.split('-').map(Number);
   const dates = [];
@@ -606,16 +618,15 @@ app.get('/api/credit-cards/:id/invoice', async (req, res) => {
       month++;
     }
     const cutoffDate = getInvoiceCutoffDate(year, month, card.closing_day);
-    const previousCutoffDate = getInvoiceCutoffDate(year, month - 1, card.closing_day);
+    const transactionEnd = getInvoiceTransactionEnd(year, month);
 
     const transactions = await db.all(`
       SELECT t.*, c.name as category_name, c.icon as category_icon, c.color as category_color 
       FROM transactions t 
       JOIN categories c ON t.category_id = c.id 
-      WHERE t.credit_card_id = ? AND t.is_paid = 0 AND t.date <= ?
-        AND (t.installment_id IS NULL OR (t.date > ? AND t.date <= ?))
+      WHERE t.credit_card_id = ? AND t.is_paid = 0 AND t.date < ?
       ORDER BY t.date DESC
-    `, [id, cutoffDate, previousCutoffDate, cutoffDate]);
+    `, [id, transactionEnd]);
 
     const total = transactions.reduce((acc, t) => acc + (t.amount || 0), 0);
     res.json({ card, transactions, total, cutoffDate });
@@ -671,12 +682,8 @@ app.get('/api/credit-cards/:id/future-invoices', async (req, res) => {
     const invoicesMap = {};
 
     transactions.forEach(t => {
-      const [transactionYear, transactionMonth] = t.date.split('-').map(Number);
-      const cutoff = getInvoiceCutoffDate(transactionYear, transactionMonth - 1, card.closing_day);
-      const invoiceDate = new Date(transactionYear, transactionMonth - 1 + (t.date > cutoff ? 1 : 0), 1);
-      const yStr = String(invoiceDate.getFullYear());
-      const mStr = String(invoiceDate.getMonth() + 1).padStart(2, '0');
-      const key = `${yStr}-${mStr}`;
+      const key = getInvoiceMonth(t.date);
+      const [yStr, mStr] = key.split('-');
 
       if (!invoicesMap[key]) {
         const year = parseInt(yStr);
@@ -738,9 +745,9 @@ app.post('/api/credit-cards/:id/pay', async (req, res) => {
     if (today.getDate() > card.closing_day) {
       month++;
     }
-    const cutoffDate = getInvoiceCutoffDate(year, month, card.closing_day);
+    const transactionEnd = getInvoiceTransactionEnd(year, month);
 
-    const unpaidRow = await db.get('SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE credit_card_id = ? AND is_paid = 0 AND date <= ?', [id, cutoffDate]);
+    const unpaidRow = await db.get('SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE credit_card_id = ? AND is_paid = 0 AND date < ?', [id, transactionEnd]);
     const unpaid = unpaidRow ? unpaidRow.total : 0;
     if (unpaid <= 0) return res.status(400).json({ error: 'Não há fatura em aberto' });
 
@@ -754,7 +761,7 @@ app.post('/api/credit-cards/:id/pay', async (req, res) => {
         VALUES ('expense', ?, ?, ?, ?, ?, 1)
       `, [unpaid, `Pagamento Fatura ${card.name}`, catId, payDate, bank_id]);
 
-      await txDb.run(`UPDATE transactions SET is_paid = 1 WHERE credit_card_id = ? AND is_paid = 0 AND date <= ?`, [id, cutoffDate]);
+      await txDb.run(`UPDATE transactions SET is_paid = 1 WHERE credit_card_id = ? AND is_paid = 0 AND date < ?`, [id, transactionEnd]);
     });
 
     res.json({ message: 'Fatura paga com sucesso', total_paid: unpaid });
