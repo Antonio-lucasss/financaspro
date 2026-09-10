@@ -567,12 +567,13 @@ function getInvoiceCutoffDate(year, month, closingDay) {
   return `${y}-${String(m + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
-function calculateInstallmentDates(purchaseDateStr, count, closingDay) {
+function calculateInstallmentDates(purchaseDateStr, count) {
   const [pYear, pMonth, pDay] = purchaseDateStr.split('-').map(Number);
   const dates = [];
 
-  const startInvoiceIndex = (pYear * 12 + (pMonth - 1)) + 1;
-  const baseDayOfMonth = closingDay || pDay;
+  // A primeira parcela mantém a data da compra; as demais avançam mensalmente.
+  const startInvoiceIndex = pYear * 12 + (pMonth - 1);
+  const baseDayOfMonth = pDay;
 
   for (let i = 0; i < count; i++) {
     const invIndex = startInvoiceIndex + i;
@@ -670,7 +671,11 @@ app.get('/api/credit-cards/:id/future-invoices', async (req, res) => {
     const invoicesMap = {};
 
     transactions.forEach(t => {
-      const [yStr, mStr] = t.date.split('-');
+      const [transactionYear, transactionMonth] = t.date.split('-').map(Number);
+      const cutoff = getInvoiceCutoffDate(transactionYear, transactionMonth - 1, card.closing_day);
+      const invoiceDate = new Date(transactionYear, transactionMonth - 1 + (t.date > cutoff ? 1 : 0), 1);
+      const yStr = String(invoiceDate.getFullYear());
+      const mStr = String(invoiceDate.getMonth() + 1).padStart(2, '0');
       const key = `${yStr}-${mStr}`;
 
       if (!invoicesMap[key]) {
@@ -894,12 +899,9 @@ app.post('/api/transactions', async (req, res) => {
     const isPaid = credit_card_id ? 0 : 1;
 
     if (parsedInstallments > 1 && credit_card_id) {
-      const card = await db.get('SELECT closing_day FROM credit_cards WHERE id = ?', [credit_card_id]);
-      const closingDay = card ? card.closing_day : null;
-
       const installmentId = crypto.randomUUID();
       const installmentAmount = amount / parsedInstallments;
-      const installmentDates = calculateInstallmentDates(date, parsedInstallments, closingDay);
+      const installmentDates = calculateInstallmentDates(date, parsedInstallments);
 
       let firstId = null;
       await db.transaction(async (txDb) => {
@@ -923,18 +925,10 @@ app.post('/api/transactions', async (req, res) => {
 
       return res.status(201).json(transaction);
     } else {
-      let adjustedDate = date;
-      if (credit_card_id) {
-        const card = await db.get('SELECT closing_day FROM credit_cards WHERE id = ?', [credit_card_id]);
-        const closingDay = card ? card.closing_day : null;
-        const dates = calculateInstallmentDates(date, 1, closingDay);
-        adjustedDate = dates[0];
-      }
-
       const result = await db.run(`
         INSERT INTO transactions (type, amount, description, category_id, date, credit_card_id, bank_id, is_paid, vehicle_id)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `, [type, amount, description, category_id, adjustedDate, credit_card_id || null, bank_id || null, isPaid, vehicle_id || null]);
+      `, [type, amount, description, category_id, date, credit_card_id || null, bank_id || null, isPaid, vehicle_id || null]);
 
       const transaction = await db.get(`
         SELECT t.*, c.name as category_name, c.icon as category_icon, c.color as category_color
@@ -966,8 +960,6 @@ app.put('/api/transactions/:id', async (req, res) => {
 
       const count = installments.length;
       const cardId = credit_card_id !== undefined ? (credit_card_id || null) : existing.credit_card_id;
-      const card = cardId ? await db.get('SELECT closing_day FROM credit_cards WHERE id = ?', [cardId]) : null;
-      const closingDay = card ? card.closing_day : null;
 
       const updatedAmount = (amount !== undefined && amount !== null && !isNaN(parseFloat(amount))) ? parseFloat(amount) : existing.amount;
       const updatedCategoryId = category_id || existing.category_id;
@@ -977,7 +969,7 @@ app.put('/api/transactions/:id', async (req, res) => {
 
       let newDates = [];
       if (date) {
-        newDates = calculateInstallmentDates(date, count, closingDay);
+        newDates = calculateInstallmentDates(date, count);
       }
 
       await db.transaction(async (txDb) => {
@@ -1011,13 +1003,7 @@ app.put('/api/transactions/:id', async (req, res) => {
     const updatedBankId = bank_id !== undefined ? (bank_id || null) : existing.bank_id;
     const updatedVehicleId = vehicle_id !== undefined ? (vehicle_id || null) : existing.vehicle_id;
 
-    let updatedDate = date || existing.date;
-    if (updatedCardId && date) {
-      const card = await db.get('SELECT closing_day FROM credit_cards WHERE id = ?', [updatedCardId]);
-      const closingDay = card ? card.closing_day : null;
-      const dates = calculateInstallmentDates(date, 1, closingDay);
-      updatedDate = dates[0];
-    }
+    const updatedDate = date || existing.date;
 
     if (!['income', 'expense'].includes(updatedType)) {
       return res.status(400).json({ error: 'Tipo deve ser income ou expense' });
