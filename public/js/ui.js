@@ -179,11 +179,11 @@ const UI = (() => {
           </div>
         </td>
         <td>
-          <span class="type-badge type-badge-${t.type}">
-            ${t.type === 'income' ? '📈 Receita' : '📉 Despesa'}
+          <span class="type-badge type-badge-${t.category_name === 'Transferência' ? 'transfer' : t.type}">
+            ${t.category_name === 'Transferência' ? '🔄 Transferência' : (t.type === 'income' ? '📈 Receita' : '📉 Despesa')}
           </span>
         </td>
-        <td class="td-amount ${t.type}">
+        <td class="td-amount ${t.category_name === 'Transferência' ? '' : t.type}">
           ${t.type === 'income' ? '+' : '-'} ${formatCurrency(t.amount)}
         </td>
         <td>
@@ -870,7 +870,7 @@ const UI = (() => {
           <td>${new Date(t.date + 'T12:00:00').toLocaleDateString('pt-BR')}</td>
           <td>${escapeHtml(t.description)}</td>
           <td><span class="td-category"><span class="category-dot" style="background: ${t.category_color};"></span> ${escapeHtml(t.category_name)}</span></td>
-          <td class="td-amount ${t.type}">
+          <td class="td-amount ${t.category_name === 'Transferência' ? '' : t.type}">
             ${t.type === 'expense' ? '- ' : '+ '}${formatCurrency(t.amount)}
           </td>
         </tr>
@@ -1187,4 +1187,5 @@ const UI = (() => {
     closeChangePasswordModal,
   };
 })();
+
 

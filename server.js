@@ -1063,16 +1063,21 @@ app.delete('/api/transactions/:id', async (req, res) => {
 
 // --- Statistics ---
 
+// Transfers retain their debit/credit entries for bank balances. The existing
+// category also identifies historical transfers, including custom descriptions.
+const excludeTransfers = " AND category_id NOT IN (SELECT id FROM categories WHERE name = 'Transferência')";
+
+
 app.get('/api/stats/summary', async (req, res) => {
   try {
     const { start_date, end_date, month, category_id } = req.query;
-    let dateFilter = '';
+    let dateFilter = excludeTransfers;
     const params = [];
     
-    let recurringDateFilter = '';
+    let recurringDateFilter = excludeTransfers;
     const recurringParams = [];
 
-    let previousFilter = '';
+    let previousFilter = excludeTransfers;
     const previousParams = [];
 
     if (category_id) {
@@ -1192,7 +1197,7 @@ app.get('/api/stats/total-installments', async (req, res) => {
 app.get('/api/stats/by-category', async (req, res) => {
   try {
     const { type, start_date, end_date } = req.query;
-    let dateFilter = '';
+    let dateFilter = excludeTransfers;
     const params = [];
 
     if (type && (type === 'income' || type === 'expense')) {
@@ -1239,7 +1244,7 @@ app.get('/api/stats/monthly', async (req, res) => {
     if (!targetYear) targetYear = new Date().getFullYear();
     targetYear = String(targetYear);
 
-    let filter = '';
+    let filter = excludeTransfers;
     const params = [targetYear];
 
     if (category_id) {
@@ -1366,9 +1371,9 @@ app.get('/api/stats/analytics', async (req, res) => {
     const prevStartStr = prevStart.toISOString().split('T')[0];
     const prevEndStr = prevEnd.toISOString().split('T')[0];
 
-    let catFilter = '';
+    let catFilter = excludeTransfers;
     const catParams = [];
-    if (category_id) { catFilter = ' AND category_id = ?'; catParams.push(category_id); }
+    if (category_id) { catFilter += ' AND category_id = ?'; catParams.push(category_id); }
 
     // ── 1. TRENDS ──
     const curIncomeRow = await db.get(`SELECT COALESCE(SUM(amount),0) as t FROM transactions WHERE type='income' AND date>=? AND date<=?${catFilter}`, [periodStart, periodEnd, ...catParams]);
@@ -1544,7 +1549,7 @@ app.get('/api/stats/analytics', async (req, res) => {
     }
 
     // ── 6. RECENT TRANSACTIONS ──
-    let recentFilter = catFilter ? `WHERE 1=1${catFilter}` : '';
+    const recentFilter = category_id ? 'WHERE t.category_id = ?' : '';
     const recentTx = await db.all(`
       SELECT t.*, c.name as category_name, c.icon as category_icon, c.color as category_color
       FROM transactions t
