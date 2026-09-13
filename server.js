@@ -965,7 +965,7 @@ app.put('/api/transactions/:id', async (req, res) => {
         SELECT * FROM transactions WHERE installment_id = ? ORDER BY installment_number ASC
       `, [existing.installment_id]);
 
-      const count = installments.length;
+      const count = existing.installments_total || installments.length;
       const cardId = credit_card_id !== undefined ? (credit_card_id || null) : existing.credit_card_id;
 
       const updatedAmount = (amount !== undefined && amount !== null && !isNaN(parseFloat(amount))) ? parseFloat(amount) : existing.amount;
@@ -975,8 +975,14 @@ app.put('/api/transactions/:id', async (req, res) => {
       let baseDescription = (description || existing.description).replace(/ \(\d+\/\d+\)$/, '').trim();
 
       let newDates = [];
-      if (date) {
-        newDates = calculateInstallmentDates(date, count);
+      if (date && date !== existing.date) {
+        // A data pertence à parcela editada, que pode não ser a primeira.
+        const [year, month, day] = date.split('-').map(Number);
+        newDates = installments.map(inst => getInvoiceCutoffDate(
+          year,
+          month - 1 + (inst.installment_number - existing.installment_number),
+          day
+        ));
       }
 
       await db.transaction(async (txDb) => {

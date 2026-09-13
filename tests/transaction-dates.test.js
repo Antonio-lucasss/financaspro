@@ -159,3 +159,30 @@ test('installments and overdue balances follow the same invoice and payment rule
   assert.equal(app.rows.filter(row => row.credit_card_id && row.is_paid).length, 3);
   assert.equal(app.rows.filter(row => row.credit_card_id && !row.is_paid).length, 3);
 });
+
+
+test('editing the second installment applies the requested date to that installment', async () => {
+  const app = setup();
+  await app.call('post /api/transactions', { ...purchase, installments: 3 });
+  const updated = await app.call('put /api/transactions/:id', { date: '2026-09-10' }, 2);
+  assert.equal(updated.date, '2026-09-10');
+  assert.deepEqual(app.rows.map(row => row.date), ['2026-08-10', '2026-09-10', '2026-10-10']);
+  await app.call('put /api/transactions/:id', { date: '2026-09-10', description: 'Mercado revisado' }, 2);
+  assert.deepEqual(app.rows.map(row => row.date), ['2026-08-10', '2026-09-10', '2026-10-10']);
+});
+
+test('saving an unchanged short-month installment date preserves the schedule', async () => {
+  const app = setup();
+  await app.call('post /api/transactions', { ...purchase, date: '2028-01-31', installments: 3 });
+  await app.call('put /api/transactions/:id', { date: '2028-02-29', description: 'Revisado' }, 2);
+  assert.deepEqual(app.rows.map(row => row.date), ['2028-01-31', '2028-02-29', '2028-03-31']);
+});
+
+test('editing a later installment handles year rollover and missing installments', async () => {
+  const app = setup();
+  await app.call('post /api/transactions', { ...purchase, installments: 3 });
+  app.rows.splice(1, 1);
+  const updated = await app.call('put /api/transactions/:id', { date: '2027-01-31' }, 3);
+  assert.equal(updated.date, '2027-01-31');
+  assert.deepEqual(app.rows.map(row => row.date), ['2026-11-30', '2027-01-31']);
+});
