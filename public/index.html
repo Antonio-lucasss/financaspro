@@ -97,11 +97,15 @@
           <button class="btn btn-period" id="btn-period-year" data-period="year">Este Ano</button>
           <button class="btn btn-period" id="btn-period-custom" data-period="custom">Personalizado</button>
         </div>
+        <div class="filter-group-inline">
+          <label for="dashboard-category-select">Categoria:</label>
+          <select id="dashboard-category-select" class="select-input" aria-controls="dashboard-transactions"><option value="">Todas as categorias</option></select>
+        </div>
         <div class="dashboard-category-filter" id="dashboard-category-filter" style="display: none;">
-          <span class="badge" id="dashboard-category-badge" style="display: flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 4px; background: rgba(99, 102, 241, 0.15); color: var(--accent-primary); font-size: 12px; font-weight: bold; cursor: pointer;">
+          <button type="button" aria-label="Limpar filtro de categoria" class="badge" id="dashboard-category-badge" style="display: flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 4px; background: rgba(99, 102, 241, 0.15); color: var(--accent-primary); font-size: 12px; font-weight: bold; cursor: pointer;">
             <span id="dashboard-category-name">Categoria</span>
             <span style="font-size: 14px;">&times;</span>
-          </span>
+          </button>
         </div>
         <div class="dashboard-date-inputs" id="dashboard-date-inputs" style="display: none;">
           <div class="filter-group-inline">
@@ -279,6 +283,20 @@
           </div>
         </div>
       </div>
+
+      <section class="card dashboard-transactions" id="dashboard-transactions" hidden aria-labelledby="dashboard-transactions-title">
+        <div class="dashboard-details-heading">
+          <h2 class="chart-title" id="dashboard-transactions-title">Gastos da categoria</h2>
+          <button type="button" class="btn btn-ghost" id="dashboard-details-clear">Limpar categoria</button>
+        </div>
+        <p id="dashboard-transactions-status" role="status" aria-live="polite"></p>
+        <div class="dashboard-details-table">
+          <table><thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Conta / cartão</th><th>Parcela</th><th>Situação</th><th>Valor</th></tr></thead>
+            <tbody id="dashboard-transactions-body"></tbody>
+          </table>
+        </div>
+        <nav id="dashboard-transactions-pagination" class="dashboard-details-pagination" aria-label="Páginas dos gastos da categoria"></nav>
+      </section>
 
       <!-- Hidden legacy elements for backward compatibility -->
       <div style="display:none;">
@@ -1063,3 +1081,4 @@
   <script src="/js/app.js"></script>
 </body>
 </html>
+

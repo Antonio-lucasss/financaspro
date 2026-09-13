@@ -17,6 +17,8 @@
   let dashboardCustomEnd = '';
   let dashboardSelectedCategory = null;
   let dashboardSelectedCategoryName = null;
+  let dashboardRequestId = 0;
+  let dashboardDetailsRequestId = 0;
   let allTransactionsCache = null;
   let currentInvoiceCardId = null;
 
@@ -108,6 +110,11 @@
     const picker = document.getElementById('dashboard-month-picker');
     const categoryFilter = document.getElementById('dashboard-category-filter');
     const categoryName = document.getElementById('dashboard-category-name');
+    const categorySelect = document.getElementById('dashboard-category-select');
+    categorySelect.innerHTML = '<option value="">Todas as categorias</option>' + allCategories
+      .filter(c => c.type !== 'income' && c.name !== 'Transferência')
+      .map(c => `<option value="${c.id}">${UI.escapeHtml(c.name)}</option>`).join('');
+    categorySelect.value = dashboardSelectedCategory || '';
 
     if (dashboardSelectedCategory) {
       categoryFilter.style.display = 'block';
@@ -136,6 +143,8 @@
 
 
   function handleDashboardCategoryClick(categoryId, categoryName) {
+    categoryId = String(categoryId || '');
+    if (!/^\d+$/.test(categoryId)) return;
     if (dashboardSelectedCategory === categoryId) {
       // Toggle off if clicking the same category
       dashboardSelectedCategory = null;
@@ -145,9 +154,12 @@
       dashboardSelectedCategoryName = categoryName;
     }
     loadDashboard();
+    if (dashboardSelectedCategory) document.getElementById('dashboard-transactions').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   async function loadDashboard() {
+    const requestId = ++dashboardRequestId;
+    loadDashboardTransactions();
     try {
       const { filters, year } = getDashboardFilters();
 
@@ -163,6 +175,7 @@
         api.getAnalytics(filters),
       ]);
 
+      if (requestId !== dashboardRequestId) return;
       UI.renderSummary(summary);
       UI.renderTopCategories(byCategory, handleDashboardCategoryClick);
 
@@ -196,7 +209,31 @@
       ChartsManager.renderMonthlyChart(monthly);
       ChartsManager.renderCategoryChart(byCategory, handleDashboardCategoryClick);
     } catch (err) {
-      UI.showToast('Erro ao carregar dashboard: ' + err.message, 'error');
+      if (requestId === dashboardRequestId) UI.showToast('Erro ao carregar dashboard: ' + err.message, 'error');
+    }
+  }
+
+  async function loadDashboardTransactions(offset = 0) {
+    const requestId = ++dashboardDetailsRequestId;
+    const panel = document.getElementById('dashboard-transactions');
+    const { filters } = getDashboardFilters();
+    panel.hidden = !filters.category_id;
+    if (panel.hidden) return;
+    document.getElementById('dashboard-transactions-title').textContent = `Gastos: ${dashboardSelectedCategoryName}`;
+    document.getElementById('dashboard-transactions-status').textContent = 'Carregando transações…';
+    document.getElementById('dashboard-transactions-body').innerHTML = '';
+    document.getElementById('dashboard-transactions-pagination').innerHTML = '';
+    panel.setAttribute('aria-busy', 'true');
+    try {
+      const result = await api.getTransactions({ ...filters, type: 'expense', limit: 25, offset, sort: 'date', order: 'DESC' });
+      if (requestId !== dashboardDetailsRequestId) return;
+      UI.renderDashboardTransactions(result, allBanks, allCreditCards, loadDashboardTransactions);
+    } catch (err) {
+      if (requestId !== dashboardDetailsRequestId) return;
+      document.getElementById('dashboard-transactions-status').textContent = 'Não foi possível carregar as transações. Selecione a categoria novamente para tentar de novo.';
+      UI.showToast('Erro ao carregar transações: ' + err.message, 'error');
+    } finally {
+      if (requestId === dashboardDetailsRequestId) panel.setAttribute('aria-busy', 'false');
     }
   }
 
@@ -1192,6 +1229,15 @@
       loadTransactions();
     });
 
+    document.getElementById('dashboard-category-select').addEventListener('change', e => {
+      dashboardSelectedCategory = e.target.value || null;
+      dashboardSelectedCategoryName = dashboardSelectedCategory ? e.target.selectedOptions[0].textContent : null;
+      loadDashboard();
+    });
+    document.getElementById('dashboard-details-clear').addEventListener('click', () => {
+      document.getElementById('dashboard-category-badge').click();
+    });
+
     // Dashboard period buttons
     document.querySelectorAll('.btn-period').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -1213,7 +1259,7 @@
     // Prev/Next buttons
     document.getElementById('btn-period-prev').addEventListener('click', () => {
       if (dashboardPeriod === 'month') {
-        dashboardDate.setMonth(dashboardDate.getMonth() - 1);
+        dashboardDate = new Date(dashboardDate.getFullYear(), dashboardDate.getMonth() - 1, 1);
       } else {
         dashboardDate.setFullYear(dashboardDate.getFullYear() - 1);
       }
@@ -1222,7 +1268,7 @@
 
     document.getElementById('btn-period-next').addEventListener('click', () => {
       if (dashboardPeriod === 'month') {
-        dashboardDate.setMonth(dashboardDate.getMonth() + 1);
+        dashboardDate = new Date(dashboardDate.getFullYear(), dashboardDate.getMonth() + 1, 1);
       } else {
         dashboardDate.setFullYear(dashboardDate.getFullYear() + 1);
       }
@@ -1235,6 +1281,10 @@
       dashboardCustomEnd = document.getElementById('dashboard-end').value;
       if (!dashboardCustomStart || !dashboardCustomEnd) {
         UI.showToast('Selecione as datas de início e fim', 'error');
+        return;
+      }
+      if (dashboardCustomStart > dashboardCustomEnd) {
+        UI.showToast('A data inicial deve ser anterior ou igual à final', 'error');
         return;
       }
       loadDashboard();
@@ -1498,4 +1548,5 @@
     init();
   }
 })();
+
 

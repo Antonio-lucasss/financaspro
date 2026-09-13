@@ -118,27 +118,52 @@ const UI = (() => {
     const totalExpense = categoryData.filter(d => d.type === 'expense').reduce((s, c) => s + c.total, 0);
 
     container.innerHTML = expenses.map((cat, i) => `
-      <div class="top-category-item${onClick ? ' clickable' : ''}" data-category-id="${cat.category_id}" data-category-name="${escapeHtml(cat.name)}">
+      <button type="button" class="top-category-item${onClick ? ' clickable' : ''}" data-category-id="${cat.id ?? cat.category_id}">
         <span class="top-category-rank">${i + 1}</span>
         <span class="top-category-icon">${cat.icon}</span>
         <div class="top-category-info">
-          <div class="top-category-name">${cat.name}</div>
+          <div class="top-category-name">${escapeHtml(cat.name)}</div>
           <div class="top-category-bar">
             <div class="top-category-bar-fill" style="width: ${(cat.total / maxTotal * 100).toFixed(1)}%; background: ${cat.color};"></div>
           </div>
         </div>
         <span class="top-category-value">${formatCurrency(cat.total)}</span>
         <span class="top-category-percent">${((cat.total / totalExpense) * 100).toFixed(0)}%</span>
-      </div>
+      </button>
     `).join('');
 
     if (onClick) {
-      container.querySelectorAll('.top-category-item').forEach(item => {
+      container.querySelectorAll('.top-category-item').forEach((item, index) => {
         item.addEventListener('click', () => {
-          onClick(item.dataset.categoryId, item.dataset.categoryName);
+          onClick(item.dataset.categoryId, expenses[index].name);
         });
       });
     }
+  }
+
+  function renderDashboardTransactions(result, banks, cards, onPage) {
+    const { data, total, limit, offset } = result;
+    const status = document.getElementById('dashboard-transactions-status');
+    status.textContent = total ? `${total} transações · Exibindo ${offset + 1}–${offset + data.length}` : 'Nenhum gasto nesta categoria no período selecionado.';
+    document.getElementById('dashboard-transactions-body').innerHTML = data.map(tx => {
+      const account = tx.credit_card_id
+        ? cards.find(c => String(c.id) === String(tx.credit_card_id))?.name
+        : banks.find(b => String(b.id) === String(tx.bank_id))?.name;
+      return `<tr>
+        <td>${formatDate(tx.date)}</td>
+        <td>${escapeHtml(tx.description)}</td>
+        <td>${escapeHtml(tx.category_name || '')}</td>
+        <td>${tx.credit_card_id ? 'Cartão: ' : ''}${escapeHtml(account || 'Não informado')}</td>
+        <td>${tx.installments_total > 1 ? `${tx.installment_number}/${tx.installments_total}` : 'À vista'}</td>
+        <td>${Number(tx.is_paid) === 1 ? 'Pago' : 'Pendente'}</td>
+        <td class="td-amount expense">${formatCurrency(tx.amount)}</td>
+      </tr>`;
+    }).join('');
+    const pages = document.getElementById('dashboard-transactions-pagination');
+    pages.innerHTML = total > limit ? `<button type="button" class="btn btn-secondary" data-offset="${offset - limit}" ${offset === 0 ? 'disabled' : ''}>Anterior</button>
+      <span>Página ${Math.floor(offset / limit) + 1} de ${Math.ceil(total / limit)}</span>
+      <button type="button" class="btn btn-secondary" data-offset="${offset + limit}" ${offset + limit >= total ? 'disabled' : ''}>Próxima</button>` : '';
+    pages.querySelectorAll('button').forEach(button => button.addEventListener('click', () => onPage(Number(button.dataset.offset))));
   }
 
   // ─── Year Select ───────────────────────────────────────────────
@@ -1148,6 +1173,7 @@ const UI = (() => {
     escapeHtml,
     renderSummary,
     renderTopCategories,
+    renderDashboardTransactions,
     renderYearSelect,
     renderTransactions,
     setOnPageChange,
@@ -1187,5 +1213,6 @@ const UI = (() => {
     closeChangePasswordModal,
   };
 })();
+
 
 

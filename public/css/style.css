@@ -2968,3 +2968,16 @@ body {
 
 
 
+
+
+/* Dashboard category drill-down */
+button.top-category-item { width: 100%; border: 0; color: inherit; font: inherit; text-align: left; }
+button.top-category-item:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+.dashboard-transactions { margin-top: 1.5rem; padding: 1.5rem; }
+.dashboard-transactions[hidden] { display: none; }
+.dashboard-details-heading, .dashboard-details-pagination { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.dashboard-details-table { overflow-x: auto; margin: 1rem 0; }
+.dashboard-details-table table { width: 100%; min-width: 720px; border-collapse: collapse; }
+.dashboard-details-table th, .dashboard-details-table td { padding: .75rem; text-align: left; border-bottom: 1px solid var(--border-color, #dce3df); }
+.dashboard-details-table th { font-size: .8rem; }
+.dashboard-details-pagination button:disabled { opacity: .45; cursor: default; }

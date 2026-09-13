@@ -840,7 +840,7 @@ app.get('/api/transactions', async (req, res) => {
     const validSorts = ['date', 'amount', 'description', 'created_at'];
     const sortCol = validSorts.includes(sort) ? `t.${sort}` : 't.date';
     const sortOrder = order === 'ASC' ? 'ASC' : 'DESC';
-    sql += ` ORDER BY ${sortCol} ${sortOrder}`;
+    sql += ` ORDER BY ${sortCol} ${sortOrder}, t.id ${sortOrder}`;
 
     const limitNum = Math.min(Math.max(parseInt(limit) || 50, 1), 200);
     const offsetNum = Math.max(parseInt(offset) || 0, 0);
@@ -1196,9 +1196,11 @@ app.get('/api/stats/total-installments', async (req, res) => {
 
 app.get('/api/stats/by-category', async (req, res) => {
   try {
-    const { type, start_date, end_date } = req.query;
+    const { type, start_date, end_date, category_id } = req.query;
     let dateFilter = excludeTransfers;
     const params = [];
+
+    if (category_id) { dateFilter += ' AND t.category_id = ?'; params.push(Number(category_id)); }
 
     if (type && (type === 'income' || type === 'expense')) {
       dateFilter += ' AND t.type = ?';
@@ -1237,7 +1239,7 @@ app.get('/api/stats/by-category', async (req, res) => {
 
 app.get('/api/stats/monthly', async (req, res) => {
   try {
-    const { year, category_id, start_date, month } = req.query;
+    const { year, category_id, start_date, end_date, month } = req.query;
     let targetYear = year;
     if (!targetYear && start_date) targetYear = start_date.split('-')[0];
     if (!targetYear && month) targetYear = month.split('-')[0];
@@ -1251,6 +1253,9 @@ app.get('/api/stats/monthly', async (req, res) => {
       filter += ' AND category_id = ?';
       params.push(category_id);
     }
+
+    if (start_date) { filter += ' AND date >= ?'; params.push(start_date); }
+    if (end_date) { filter += ' AND date <= ?'; params.push(end_date); }
 
     const data = await db.all(`
       SELECT
@@ -1549,7 +1554,7 @@ app.get('/api/stats/analytics', async (req, res) => {
     }
 
     // ── 6. RECENT TRANSACTIONS ──
-    const recentFilter = category_id ? 'WHERE t.category_id = ?' : '';
+    const recentFilter = 'WHERE t.date >= ? AND t.date <= ?' + (category_id ? ' AND t.category_id = ?' : '');
     const recentTx = await db.all(`
       SELECT t.*, c.name as category_name, c.icon as category_icon, c.color as category_color
       FROM transactions t
@@ -1557,7 +1562,7 @@ app.get('/api/stats/analytics', async (req, res) => {
       ${recentFilter}
       ORDER BY t.date DESC, t.created_at DESC
       LIMIT 5
-    `, catParams);
+    `, [periodStart, periodEnd, ...catParams]);
 
     res.json({
       trends: {
@@ -1869,3 +1874,4 @@ if (require.main === module) {
 }
 
 module.exports = app;
+

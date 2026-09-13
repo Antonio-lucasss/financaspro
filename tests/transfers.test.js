@@ -8,7 +8,7 @@ const { execFileSync } = require('node:child_process');
 
 // Run the real route SQL against an isolated SQLite fixture (Python standard library).
 // No production database, credentials or installed application dependencies are used.
-test('transfers move bank balances without inflating reports, including existing transfers', async () => {
+test('transfers move bank balances without inflating reports, including existing transfers', async (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'financas-transfers-'));
   try {
     const database = path.join(dir, 'test.sqlite');
@@ -85,5 +85,32 @@ c.commit();print(json.dumps(out))`;
     assert.equal(filtered.total_expense,0);
     assert.equal(filtered.total_income,0);
     assert.equal(query('SELECT COUNT(*) AS n FROM transactions WHERE category_id=3').rows[0].n,4);
+    await t.test('dashboard category and period agree with every paginated transaction', async () => {
+      query("INSERT INTO categories VALUES(4,'Transporte','expense','','',0)");
+      for (let i = 0; i < 27; i++) query("INSERT INTO transactions(type,amount,description,category_id,date,bank_id,is_paid) VALUES('expense',10,'Viagem',4,'2026-09-15',1,1)");
+      query("INSERT INTO transactions(type,amount,description,category_id,date,bank_id,is_paid) VALUES('expense',999,'Fora do período',4,'2026-10-01',1,1)");
+      const filters = { category_id: 4, start_date: '2026-09-01', end_date: '2026-09-30' };
+      const summary = await call('get /api/stats/summary', {}, filters);
+      const categories = await call('get /api/stats/by-category', {}, { ...filters, type: 'expense' });
+      assert.equal(categories.length,1);
+      assert.equal(categories[0].id,4);
+      assert.equal(categories[0].total,270);
+      assert.equal(summary.total_expense,270);
+      const monthly = await call('get /api/stats/monthly', {}, { ...filters, year: '2026' });
+      assert.equal(monthly[8].expense,270);
+      assert.equal(monthly[9].expense,0);
+      const first = await call('get /api/transactions', {}, { ...filters, type: 'expense', limit: 25, offset: 0 });
+      const second = await call('get /api/transactions', {}, { ...filters, type: 'expense', limit: 25, offset: 25 });
+      assert.equal(first.total,27);
+      assert.equal(first.data.length,25);
+      assert.equal(second.data.length,2);
+      const rows = [...first.data,...second.data];
+      assert.equal(new Set(rows.map(row => row.id)).size,27);
+      assert.equal(rows.reduce((sum,row) => sum + row.amount,0),summary.total_expense);
+      const analytics = await call('get /api/stats/analytics', {}, filters);
+      assert.ok(analytics.recent_transactions.every(row => row.category_id === 4 && row.date <= filters.end_date));
+      const empty = await call('get /api/transactions', {}, { ...filters, start_date: '2026-09-20', type: 'expense' });
+      assert.equal(empty.total,0);
+    });
   } finally { fs.rmSync(dir,{ recursive: true, force: true }); }
 });

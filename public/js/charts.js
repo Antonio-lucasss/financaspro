@@ -173,12 +173,16 @@ const ChartsManager = (() => {
           legend: {
             ...baseOptions.plugins.legend,
             position: 'right',
+            onClick: (_event, item) => {
+              const category = sorted[item.index];
+              if (category && onClick) onClick(category.id ?? category.category_id, category.name);
+            },
           },
         },
         onClick: (event, elements) => {
           if (elements.length > 0 && onClick) {
             const index = elements[0].index;
-            onClick(sorted[index].category_id, sorted[index].name);
+            onClick(sorted[index].id ?? sorted[index].category_id, sorted[index].name);
           }
         },
         onHover: (event, elements) => {
@@ -471,3 +475,4 @@ const ChartsManager = (() => {
     renderHealthGauge,
   };
 })();
+
