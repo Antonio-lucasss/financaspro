@@ -5,9 +5,27 @@
 class FinanceAPI {
   constructor(baseURL = '') {
     this.baseURL = baseURL;
+    this._activeRequests = 0;
+    this._requestQueue = [];
   }
 
   async _request(method, path, body = null, params = null) {
+    if (this._activeRequests < 3) {
+      this._activeRequests++;
+    } else {
+      await new Promise(resolve => this._requestQueue.push(resolve));
+    }
+    try {
+      return await this._sendRequest(method, path, body, params);
+    } finally {
+      // Hand the occupied slot directly to the next caller, even on failure.
+      const next = this._requestQueue.shift();
+      if (next) next();
+      else this._activeRequests--;
+    }
+  }
+
+  async _sendRequest(method, path, body = null, params = null) {
     let url = `${this.baseURL}${path}`;
     if (params) {
       const searchParams = new URLSearchParams();
@@ -258,3 +276,4 @@ class FinanceAPI {
 
 // Global instance
 const api = new FinanceAPI();
+

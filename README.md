@@ -45,7 +45,7 @@ O FinançasPro está 100% configurado para rodar na Vercel através de Serverles
    | :--- | :--- | :--- |
    | `SUPABASE_URL` | URL da API do seu projeto Supabase | `https://xxxx.supabase.co` |
    | `SUPABASE_ANON_KEY` | Chave pública anônima do Supabase | `sb_publishable_...` |
-   | `DATABASE_URL` | String de conexão do Supabase Pooler (porta 5432 ou 6543) | `postgresql://user.ref:password@aws-0-sa-east-1.pooler.supabase.com:5432/postgres` |
+   | `DATABASE_URL` | String de conexão do Supabase Pooler (modo Transaction, porta 6543) | `postgresql://user.ref:password@aws-0-sa-east-1.pooler.supabase.com:6543/postgres` |
    | `NODE_ENV` | Ambiente de execução | `production` |
 
 3. **Deploy**:
@@ -154,3 +154,24 @@ financaspro/
 ## 📄 Licença
 
 Este projeto é de uso pessoal e privado. Todos os direitos reservados.
+
+
+
+## Conexões do dashboard
+
+A aplicação usa uma conexão PostgreSQL por instância e libera conexões ociosas
+após 1 segundo. URLs do pooler compartilhado do Supabase (`*.pooler.supabase.com`)
+na porta 5432 são normalizadas para o modo Transaction, na porta 6543, sem alterar
+host, usuário ou banco. A normalização também se aplica a `DATABASE_URL` já
+configurada no ambiente. Conexões diretas e de outros provedores não são alteradas.
+
+As operações `BEGIN`/`COMMIT` continuam usando o mesmo cliente até o final da
+transação. As consultas não usam prepared statements nomeados nem estado de sessão.
+O navegador mantém no máximo três chamadas à API simultâneas, liberando a fila
+mesmo se uma chamada falhar. Não há repetição automática de gravações.
+
+Referência: https://supabase.com/docs/guides/database/connecting-to-postgres
+
+As três variáveis `DATABASE_URL`, `SUPABASE_URL` e `SUPABASE_ANON_KEY` são
+obrigatórias. Credenciais não possuem valores padrão no código. Configure-as
+na hospedagem antes do deploy (ou em `.env` para execução local).

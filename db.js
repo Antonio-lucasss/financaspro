@@ -12,9 +12,13 @@ require('dotenv').config();
 types.setTypeParser(1700, val => (val === null ? null : parseFloat(val)));
 types.setTypeParser(20, val => (val === null ? null : parseInt(val, 10)));
 
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://frjalkvpciznfnhkrdpy.supabase.co';
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_2xoO_alRbY7Op9JqfVdZNA_Fw1EPKLL';
-const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://app_financas.frjalkvpciznfnhkrdpy:FinancasPro_App_2026_SecureDb!@aws-0-sa-east-1.pooler.supabase.com:5432/postgres';
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+const DATABASE_URL = process.env.DATABASE_URL;
+
+for (const name of ['DATABASE_URL', 'SUPABASE_URL', 'SUPABASE_ANON_KEY']) {
+  if (!process.env[name]) throw new Error(`Configure a variável de ambiente ${name} na hospedagem.`);
+}
 
 const WebSocket = require('ws');
 
@@ -25,13 +29,8 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 });
 
 // Initialize PostgreSQL connection pool (optimized for serverless on Vercel)
-const pool = new Pool({
-  connectionString: DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-  max: process.env.VERCEL ? 1 : 10,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000,
-});
+const { getPoolConfig } = require('./db-pool-config');
+const pool = new Pool(getPoolConfig(DATABASE_URL));
 
 pool.on('error', (err) => {
   console.error('⚠️ Erro inesperado no pool do Supabase/PostgreSQL:', err.message);
@@ -138,3 +137,4 @@ module.exports = {
   SUPABASE_ANON_KEY,
   DATABASE_URL,
 };
+
