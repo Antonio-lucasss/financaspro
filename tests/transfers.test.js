@@ -112,5 +112,36 @@ c.commit();print(json.dumps(out))`;
       const empty = await call('get /api/transactions', {}, { ...filters, start_date: '2026-09-20', type: 'expense' });
       assert.equal(empty.total,0);
     });
+    await t.test('transaction filters combine bank, payment, dates, category and pagination', async () => {
+      query("INSERT INTO transactions(type,amount,description,category_id,date,bank_id,credit_card_id,is_paid) VALUES ('expense',20,'Débito destino',2,'2026-09-10',2,NULL,1),('expense',30,'Cartão pendente',2,'2026-09-10',NULL,1,0),('expense',40,'Cartão pago',2,'2026-09-10',1,1,1)");
+      const bank = await call('get /api/transactions', {}, { bank_id: 2 });
+      assert.ok(bank.data.every(row => row.bank_id === 2));
+      assert.ok(bank.data.some(row => row.category_id === 3), 'bank history retains transfers');
+      const debit = await call('get /api/transactions', {}, { payment_method: 'debit', category_id: 2, start_date: '2026-09-01', end_date: '2026-09-30' });
+      assert.equal(debit.total,2);
+      assert.equal(debit.data.reduce((sum,row) => sum + row.amount,0),120);
+      const combined = await call('get /api/transactions', {}, { payment_method: 'debit', bank_id: 2, category_id: 2 });
+      assert.equal(combined.total,1);
+      assert.equal(combined.data[0].description,'Débito destino');
+      const credit1 = await call('get /api/transactions', {}, { payment_method: 'credit', limit: 1 });
+      const credit2 = await call('get /api/transactions', {}, { payment_method: 'credit', limit: 1, offset: 1 });
+      assert.equal(credit1.total,2);
+      assert.equal(credit2.total,2);
+      assert.notEqual(credit1.data[0].id,credit2.data[0].id);
+      assert.equal(credit1.data[0].is_paid + credit2.data[0].is_paid,1);
+      const creditBank = await call('get /api/transactions', {}, { payment_method: 'credit', bank_id: 1 });
+      assert.equal(creditBank.total,1);
+      assert.equal(creditBank.data[0].description,'Cartão pago');
+      const noTransfers = await call('get /api/transactions', {}, { payment_method: 'debit', category_id: 3 });
+      assert.equal(noTransfers.total,0);
+      const empty = await call('get /api/transactions', {}, { payment_method: 'credit', bank_id: 2 });
+      assert.equal(empty.total,0);
+      for (const query of [{ bank_id: '1 OR 1=1' }, { bank_id: '-1' }, { payment_method: 'invalid' }]) {
+        const res = { status(code) { this.code = code; return this; }, json(value) { this.value = value; } };
+        await routes['get /api/transactions']({ query },res);
+        assert.equal(res.code,400);
+      }
+    });
   } finally { fs.rmSync(dir,{ recursive: true, force: true }); }
 });
+

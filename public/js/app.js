@@ -239,6 +239,11 @@
 
   // ─── Transactions ─────────────────────────────────────────────
   async function loadTransactions() {
+    const bankFilter = document.getElementById('filter-bank');
+    const selectedBank = bankFilter.value;
+    bankFilter.innerHTML = '<option value="">Todos os bancos</option>' + allBanks
+      .map(bank => `<option value="${bank.id}">${UI.escapeHtml(bank.name)}</option>`).join('');
+    bankFilter.value = selectedBank;
     try {
       const result = await api.getTransactions(transactionFilters);
       allTransactionsCache = result;
@@ -1192,11 +1197,21 @@
     // Vehicles
     document.getElementById('vehicle-form').addEventListener('submit', handleVehicleSubmit);
 
+    // Payment filters apply to expenses; avoid a contradictory income selection.
+    document.getElementById('filter-payment-method').addEventListener('change', e => {
+      if (e.target.value) document.getElementById('filter-type').value = 'expense';
+    });
+    document.getElementById('filter-type').addEventListener('change', e => {
+      if (e.target.value === 'income') document.getElementById('filter-payment-method').value = '';
+    });
+
     // Filters
     document.getElementById('btn-filter-apply').addEventListener('click', () => {
       transactionFilters = {
         type: document.getElementById('filter-type').value,
         category_id: document.getElementById('filter-category').value,
+        bank_id: document.getElementById('filter-bank').value,
+        payment_method: document.getElementById('filter-payment-method').value,
         start_date: document.getElementById('filter-start').value,
         end_date: document.getElementById('filter-end').value,
         search: document.getElementById('filter-search').value,
@@ -1209,6 +1224,8 @@
     document.getElementById('btn-filter-clear').addEventListener('click', () => {
       document.getElementById('filter-type').value = '';
       document.getElementById('filter-category').value = '';
+      document.getElementById('filter-bank').value = '';
+      document.getElementById('filter-payment-method').value = '';
       document.getElementById('filter-start').value = '';
       document.getElementById('filter-end').value = '';
       document.getElementById('filter-search').value = '';
@@ -1548,5 +1565,6 @@
     init();
   }
 })();
+
 
 

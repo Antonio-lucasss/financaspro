@@ -802,7 +802,14 @@ app.get('/api/transactions/autocomplete', async (req, res) => {
 
 app.get('/api/transactions', async (req, res) => {
   try {
-    const { type, category_id, start_date, end_date, search, limit, offset, sort, order } = req.query;
+    const { type, category_id, bank_id, payment_method, start_date, end_date, search, limit, offset, sort, order } = req.query;
+
+    if (bank_id && (!/^\d+$/.test(String(bank_id)) || !Number.isSafeInteger(Number(bank_id)) || Number(bank_id) < 1)) {
+      return res.status(400).json({ error: 'Banco inválido' });
+    }
+    if (payment_method && !['debit', 'credit'].includes(payment_method)) {
+      return res.status(400).json({ error: 'Forma de pagamento inválida' });
+    }
 
     let sql = `
       SELECT t.*, c.name as category_name, c.icon as category_icon, c.color as category_color
@@ -819,6 +826,17 @@ app.get('/api/transactions', async (req, res) => {
     if (category_id) {
       sql += ' AND t.category_id = ?';
       params.push(Number(category_id));
+    }
+    if (bank_id) {
+      sql += ' AND t.bank_id = ?';
+      params.push(Number(bank_id));
+    }
+    if (payment_method) {
+      // Purchases only; transfers remain available through the bank filter.
+      sql += " AND t.type = 'expense' AND c.name <> 'Transferência'";
+      sql += payment_method === 'credit'
+        ? ' AND t.credit_card_id IS NOT NULL'
+        : ' AND t.credit_card_id IS NULL AND t.bank_id IS NOT NULL';
     }
     if (start_date) {
       sql += ' AND t.date >= ?';
@@ -1874,4 +1892,5 @@ if (require.main === module) {
 }
 
 module.exports = app;
+
 

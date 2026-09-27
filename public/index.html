@@ -327,6 +327,21 @@
             </select>
           </div>
           <div class="filter-group">
+            <label for="filter-bank">Banco do lançamento</label>
+            <select id="filter-bank" class="select-input">
+              <option value="">Todos os bancos</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="filter-payment-method">Forma de pagamento</label>
+            <select id="filter-payment-method" class="select-input" aria-describedby="filter-payment-hint">
+              <option value="">Todas</option>
+              <option value="debit">Débito / conta bancária</option>
+              <option value="credit">Crédito</option>
+            </select>
+            <small id="filter-payment-hint">Débito reúne despesas da conta sem cartão de crédito, exceto transferências.</small>
+          </div>
+          <div class="filter-group">
             <label for="filter-start">Data Início</label>
             <input type="date" id="filter-start" class="date-input">
           </div>
@@ -1068,4 +1083,5 @@
   <script src="/js/app.js"></script>
 </body>
 </html>
+
 
